@@ -17,6 +17,7 @@ import yaml
 from camera import USBCamera
 from detector import YOLODetector
 from inventory import InventoryTracker
+from product_tracker import ProductTracker
 from server import VideoStreamServer, StreamManager
 
 # Configure logging
@@ -52,6 +53,7 @@ class InventorySystem:
         self.camera: Optional[USBCamera] = None
         self.detector: Optional[YOLODetector] = None
         self.inventory_tracker: Optional[InventoryTracker] = None
+        self.product_tracker: Optional[ProductTracker] = None
         self.server: Optional[VideoStreamServer] = None
         self.stream_manager: Optional[StreamManager] = None
         
@@ -173,6 +175,11 @@ class InventorySystem:
             
             logger.info("Inventory tracker initialized")
             
+            # Initialize product tracker for time-based tracking and sale recording
+            logger.info("Initializing product tracker...")
+            self.product_tracker = ProductTracker(verification_interval=5.0)
+            logger.info("Product tracker initialized")
+            
             # Initialize web server
             logger.info("Initializing web server...")
             server_config = self.config['server']
@@ -192,6 +199,7 @@ class InventorySystem:
                 camera=self.camera,
                 detector=self.detector,
                 inventory_tracker=self.inventory_tracker,
+                product_tracker=self.product_tracker,
                 server=self.server,
                 target_fps=stream_config['target_fps']
             )

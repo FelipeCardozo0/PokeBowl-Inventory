@@ -53,6 +53,8 @@ class VideoStreamServer:
         self.latest_frame: Optional[np.ndarray] = None
         self.latest_inventory: dict = {}
         self.latest_stats: dict = {}
+        self.latest_timers: dict = {}
+        self.latest_sales: list = []
         
         # Server statistics
         self.frames_streamed = 0
@@ -110,11 +112,23 @@ class VideoStreamServer:
         logger.info(f"WebSocket connected: {client_addr} (total: {len(self.websockets)})")
         
         try:
-            # Send initial inventory
+            # Send initial data
             await self.send_to_client(ws, {
                 'type': 'inventory',
                 'data': self.latest_inventory
             })
+            
+            if self.latest_timers:
+                await self.send_to_client(ws, {
+                    'type': 'timers',
+                    'data': self.latest_timers
+                })
+            
+            if self.latest_sales:
+                await self.send_to_client(ws, {
+                    'type': 'sales',
+                    'data': self.latest_sales
+                })
             
             # Handle incoming messages (if any)
             async for msg in ws:
@@ -280,6 +294,54 @@ class VideoStreamServer:
                 return_exceptions=True
             )
     
+    async def broadcast_timers(self, timers: dict):
+        """
+        Broadcast product timers to all clients
+        
+        Args:
+            timers: Dictionary mapping product names to duration strings
+        """
+        self.latest_timers = timers
+        
+        if not self.websockets:
+            return
+        
+        message = {
+            'type': 'timers',
+            'data': timers,
+            'timestamp': time.time()
+        }
+        
+        if self.websockets:
+            await asyncio.gather(
+                *[ws.send_json(message) for ws in self.websockets],
+                return_exceptions=True
+            )
+    
+    async def broadcast_sales(self, sales: list):
+        """
+        Broadcast sales log to all clients
+        
+        Args:
+            sales: List of sale dictionaries
+        """
+        self.latest_sales = sales
+        
+        if not self.websockets:
+            return
+        
+        message = {
+            'type': 'sales',
+            'data': sales,
+            'timestamp': time.time()
+        }
+        
+        if self.websockets:
+            await asyncio.gather(
+                *[ws.send_json(message) for ws in self.websockets],
+                return_exceptions=True
+            )
+    
     def update_frame(self, frame: np.ndarray):
         """
         Update latest frame (synchronous wrapper)
@@ -348,6 +410,7 @@ class StreamManager:
         camera,
         detector,
         inventory_tracker,
+        product_tracker,
         server: VideoStreamServer,
         target_fps: int = 30
     ):
@@ -358,12 +421,14 @@ class StreamManager:
             camera: USBCamera instance
             detector: YOLODetector instance
             inventory_tracker: InventoryTracker instance
+            product_tracker: ProductTracker instance
             server: VideoStreamServer instance
             target_fps: Target streaming FPS
         """
         self.camera = camera
         self.detector = detector
         self.inventory_tracker = inventory_tracker
+        self.product_tracker = product_tracker
         self.server = server
         self.target_fps = target_fps
         self.frame_interval = 1.0 / target_fps
@@ -417,6 +482,23 @@ class StreamManager:
             # Update inventory
             self.inventory_tracker.update(detections)
             inventory = self.inventory_tracker.get_inventory()
+            
+            # Update product tracker (handles timers and sale detection)
+            current_time = time.time()
+            previous_sales_count = self.product_tracker.get_total_sales_count()
+            self.product_tracker.update_inventory(inventory, current_time)
+            
+            # Get active timers
+            active_timers = self.product_tracker.get_active_timers(current_time)
+            
+            # Broadcast timers frequently (they update every frame conceptually)
+            await self.server.broadcast_timers(active_timers)
+            
+            # Only broadcast sales if new sales were detected (verification cycle ran)
+            current_sales_count = self.product_tracker.get_total_sales_count()
+            if current_sales_count > previous_sales_count:
+                all_sales = self.product_tracker.get_sales_log()
+                await self.server.broadcast_sales(all_sales)
             
             # Draw detections on frame
             annotated_frame = self.detector.draw_detections(frame, detections)
