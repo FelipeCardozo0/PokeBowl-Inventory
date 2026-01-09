@@ -1,319 +1,579 @@
-# YOLOv8 Live Inventory Monitoring System
+# 🍜 Poke Bowl Inventory System
 
-A distributed real-time video monitoring system that streams YOLOv8 object detection results from multiple Raspberry Pi cameras to a centralized web interface.
+**Production-ready computer vision inventory system for NVIDIA Jetson Orin Nano**
 
-## System Architecture
-
-```
-┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
-│  Raspberry Pi   │      │  Raspberry Pi   │      │  Raspberry Pi   │
-│   (Camera 1)    │      │   (Camera 2)    │      │   (Camera 3,4)  │
-│                 │      │                 │      │                 │
-│  client.py      │      │  client.py      │      │  client.py      │
-│  + YOLOv8       │      │  + YOLOv8       │      │  + YOLOv8       │
-└────────┬────────┘      └────────┬────────┘      └────────┬────────┘
-         │                        │                        │
-         │    WebSocket           │    WebSocket           │
-         │    (Publish)           │    (Publish)           │
-         └────────────────────────┼────────────────────────┘
-                                  │
-                         ┌────────▼────────┐
-                         │  Central Server │
-                         │                 │
-                         │   server.py     │
-                         │   (FastAPI)     │
-                         └────────┬────────┘
-                                  │
-                                  │    WebSocket
-                                  │    (Broadcast)
-                         ┌────────▼────────┐
-                         │  Web Browser    │
-                         │                 │
-                         │   index.html    │
-                         │   (2x2 Grid)    │
-                         └─────────────────┘
-```
-
-## Features
-
-- **Real-time YOLOv8 Detection**: Each Raspberry Pi runs YOLOv8 inference on live camera feeds
-- **WebSocket Streaming**: Low-latency video streaming using WebSocket protocol
-- **2x2 Grid Display**: Clean web interface showing all four camera feeds simultaneously
-- **Auto-Reconnection**: Clients automatically reconnect if connection is lost
-- **Resilient**: Handles camera disconnections and network issues gracefully
-- **Scalable**: Built with FastAPI for high-performance async operations
-
-## System Components
-
-### 1. Client Script (`client.py`)
-Runs on each Raspberry Pi to capture video, perform YOLOv8 inference, and stream results.
-
-### 2. Backend Server (`server.py`)
-Central FastAPI server that receives streams from Raspberry Pis and broadcasts to viewers.
-
-### 3. Frontend (`index.html`)
-Web interface that displays all four camera feeds in a beautiful 2x2 grid layout.
-
-## Installation
-
-### On the Server (Central Computer)
-
-1. **Install Python dependencies:**
-   ```bash
-   pip install -r requirements-server.txt
-   ```
-
-2. **Place files in the same directory:**
-   - `server.py`
-   - `index.html`
-
-3. **Start the server:**
-   ```bash
-   uvicorn server:app --host 0.0.0.0 --port 8000
-   ```
-
-   The server will start on `http://0.0.0.0:8000`
-
-### On Each Raspberry Pi
-
-1. **Install Python dependencies:**
-   ```bash
-   pip install -r requirements-client.txt
-   ```
-
-2. **Copy required files:**
-   - `client.py`
-   - `best.pt` (your trained YOLOv8 model)
-
-3. **Start the client (replace with your server's IP):**
-   ```bash
-   # Camera 1
-   python client.py ws://192.168.1.100:8000 cam1
-
-   # Camera 2
-   python client.py ws://192.168.1.100:8000 cam2
-
-   # Camera 3
-   python client.py ws://192.168.1.100:8000 cam3
-
-   # Camera 4
-   python client.py ws://192.168.1.100:8000 cam4
-   ```
-
-## Usage
-
-### Starting the System
-
-1. **Start the server first:**
-   ```bash
-   uvicorn server:app --host 0.0.0.0 --port 8000
-   ```
-
-2. **Open the web interface:**
-   Open your browser and navigate to:
-   ```
-   http://[SERVER_IP]:8000
-   ```
-   Replace `[SERVER_IP]` with your server's IP address.
-
-3. **Start each Raspberry Pi client:**
-   ```bash
-   python client.py ws://[SERVER_IP]:8000 [CAMERA_ID]
-   ```
-
-### Command-Line Arguments
-
-**Client (`client.py`):**
-```bash
-python client.py <server_url> <camera_id> [--model MODEL_PATH] [--camera CAMERA_INDEX]
-```
-
-- `server_url`: WebSocket server URL (e.g., `ws://192.168.1.100:8000`)
-- `camera_id`: Unique identifier (must be one of: `cam1`, `cam2`, `cam3`, `cam4`)
-- `--model`: Path to YOLOv8 model (default: `best.pt`)
-- `--camera`: Camera device index (default: `0`)
-
-**Examples:**
-```bash
-# Basic usage
-python client.py ws://192.168.1.100:8000 cam1
-
-# With custom model path
-python client.py ws://192.168.1.100:8000 cam2 --model /path/to/model.pt
-
-# With different camera index
-python client.py ws://192.168.1.100:8000 cam3 --camera 1
-```
-
-## Configuration
-
-### Network Configuration
-
-1. **Find your server's IP address:**
-   - Linux/Mac: `ifconfig` or `ip addr`
-   - Windows: `ipconfig`
-
-2. **Ensure firewall allows connections:**
-   ```bash
-   # Linux (example for ufw)
-   sudo ufw allow 8000/tcp
-   ```
-
-3. **Update client commands with the correct server IP**
-
-### Camera Configuration
-
-If you're using an Arducam or specific camera hardware on Raspberry Pi:
-
-1. **Enable camera interface:**
-   ```bash
-   sudo raspi-config
-   # Navigate to Interface Options > Camera > Enable
-   ```
-
-2. **For Arducam, you may need specific drivers:**
-   ```bash
-   # Follow Arducam's installation guide for your specific model
-   ```
-
-3. **Test camera:**
-   ```bash
-   # For USB cameras
-   ls -l /dev/video*
-   
-   # Verify with OpenCV
-   python -c "import cv2; cap = cv2.VideoCapture(0); print('Camera OK' if cap.isOpened() else 'Camera FAIL')"
-   ```
-
-### Running as a Service (Optional)
-
-To make clients start automatically on Raspberry Pi boot:
-
-1. **Create a systemd service file:**
-   ```bash
-   sudo nano /etc/systemd/system/yolo-client.service
-   ```
-
-2. **Add the following content:**
-   ```ini
-   [Unit]
-   Description=YOLOv8 Video Streaming Client
-   After=network.target
-
-   [Service]
-   Type=simple
-   User=pi
-   WorkingDirectory=/home/pi/yolo-project
-   ExecStart=/usr/bin/python3 /home/pi/yolo-project/client.py ws://192.168.1.100:8000 cam1
-   Restart=always
-   RestartSec=10
-
-   [Install]
-   WantedBy=multi-user.target
-   ```
-
-3. **Enable and start the service:**
-   ```bash
-   sudo systemctl enable yolo-client.service
-   sudo systemctl start yolo-client.service
-   sudo systemctl status yolo-client.service
-   ```
-
-## Troubleshooting
-
-### Client Cannot Connect to Server
-
-1. **Check server is running:**
-   ```bash
-   curl http://[SERVER_IP]:8000/health
-   ```
-
-2. **Verify network connectivity:**
-   ```bash
-   ping [SERVER_IP]
-   ```
-
-3. **Check firewall settings**
-
-### No Video Appearing
-
-1. **Check camera is working:**
-   ```bash
-   python -c "import cv2; cap = cv2.VideoCapture(0); print(cap.isOpened())"
-   ```
-
-2. **Verify model file exists:**
-   ```bash
-   ls -l best.pt
-   ```
-
-3. **Check server logs for errors**
-
-### Poor Performance / Lag
-
-1. **Reduce frame rate in `client.py`:**
-   Change the sleep value in line ~188:
-   ```python
-   await asyncio.sleep(0.066)  # ~15 FPS instead of 30
-   ```
-
-2. **Lower JPEG quality in `client.py`:**
-   Change line ~165:
-   ```python
-   _, buffer = cv2.imencode('.jpg', annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 60])
-   ```
-
-3. **Check network bandwidth**
-
-### Memory Issues on Raspberry Pi
-
-1. **Reduce frame resolution before inference:**
-   Add after line 154 in `client.py`:
-   ```python
-   frame = cv2.resize(frame, (640, 480))
-   ```
-
-2. **Use a smaller YOLOv8 model:**
-   - YOLOv8n (nano) instead of YOLOv8s/m/l/x
-
-## API Endpoints
-
-### Server Endpoints
-
-- `GET /` - Serves the web interface
-- `GET /health` - Health check (returns connection stats)
-- `WebSocket /ws/broadcast` - Viewer endpoint (browsers connect here)
-- `WebSocket /ws/publish/{camera_id}` - Publisher endpoint (Raspberry Pis connect here)
-
-### Health Check Response
-```json
-{
-  "status": "healthy",
-  "viewers": 2,
-  "publishers": 4,
-  "active_cameras": ["cam1", "cam2", "cam3", "cam4"]
-}
-```
-
-## Performance Specifications
-
-- **Frame Rate**: ~30 FPS per camera (adjustable)
-- **Latency**: < 200ms (on local network)
-- **Bandwidth**: ~1-2 Mbps per camera stream
-- **Concurrent Viewers**: Tested with 10+ simultaneous viewers
-
-## License
-
-This project is provided as-is for the YOLOv8 inventory monitoring system.
-
-## Support
-
-For issues or questions:
-1. Check the troubleshooting section
-2. Review server and client logs
-3. Verify all components are using the correct IP addresses and ports
+A real-time object detection and inventory tracking system designed for restaurant environments. Uses YOLO for detection, temporal smoothing for stability, and a local web interface for monitoring.
 
 ---
 
-**Built with:** Python, FastAPI, WebSockets, YOLOv8, OpenCV
+## 📋 System Overview
+
+### Hardware
+- **Compute**: NVIDIA Jetson Orin Nano
+- **Camera**: USB megapixel camera (UVC-compliant)
+- **Display**: Hamtysan 7" HDMI monitor (or any HDMI display)
+- **OS**: JetPack 6.x (Ubuntu 22.04)
+
+### Features
+- ✅ Real-time YOLO-based object detection with GPU acceleration
+- ✅ Temporal smoothing for stable inventory counts
+- ✅ WebSocket-based live video streaming
+- ✅ Automatic startup on boot (systemd)
+- ✅ Graceful camera disconnect/reconnect handling
+- ✅ Low-latency, production-ready architecture
+- ✅ Headless operation with web-based UI
+
+---
+
+## 🗂️ Repository Structure
+
+```
+Poke-Bowl---updated-January/
+│
+├── backend/
+│   ├── main.py              # Application entry point
+│   ├── camera.py            # USB camera handler with reconnection
+│   ├── detector.py          # YOLO inference wrapper
+│   ├── inventory.py         # Inventory tracking with smoothing
+│   └── server.py            # Web server and streaming
+│
+├── frontend/
+│   └── index.html           # Web UI (video feed + counts)
+│
+├── config/
+│   └── config.yaml          # System configuration
+│
+├── deployment/
+│   ├── pokebowl-inventory.service    # Systemd service file
+│   ├── chromium-kiosk.service        # Browser kiosk mode service
+│   ├── install_service.sh            # Service installation script
+│   └── setup_autostart.sh            # Full auto-start setup
+│
+├── best.pt                  # Trained YOLO model
+├── requirements.txt         # Python dependencies
+├── dataset/                 # Training data (preserved)
+└── Images/                  # Raw images (preserved)
+```
+
+---
+
+## 🚀 Quick Start (Jetson Orin Nano)
+
+### Prerequisites
+
+1. **JetPack 6.x** installed on Jetson Orin Nano
+2. **USB camera** connected
+3. **HDMI display** connected (optional for headless operation)
+
+### Step 1: Clone Repository
+
+```bash
+cd ~
+git clone <repository-url> Poke-Bowl---updated-January
+cd Poke-Bowl---updated-January
+```
+
+### Step 2: Install System Dependencies
+
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+    python3-pip \
+    python3-dev \
+    libopencv-dev \
+    python3-opencv \
+    v4l-utils \
+    chromium-browser \
+    gstreamer1.0-tools \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad
+```
+
+### Step 3: Install PyTorch (Jetson-Optimized)
+
+**IMPORTANT**: Use the official NVIDIA PyTorch wheel for Jetson:
+
+```bash
+# Download PyTorch for JetPack 6.x
+wget https://developer.download.nvidia.com/compute/redist/jp/v60/pytorch/torch-2.1.0a0+41361538.nv23.06-cp310-cp310-linux_aarch64.whl
+
+# Install
+pip3 install torch-2.1.0a0+41361538.nv23.06-cp310-cp310-linux_aarch64.whl
+```
+
+### Step 4: Install Torchvision
+
+```bash
+sudo apt-get install libjpeg-dev zlib1g-dev
+
+git clone --branch v0.16.0 https://github.com/pytorch/vision torchvision
+cd torchvision
+python3 setup.py install --user
+cd ..
+```
+
+### Step 5: Install Python Dependencies
+
+```bash
+pip3 install -r requirements.txt
+```
+
+### Step 6: Verify Camera
+
+```bash
+# List available cameras
+v4l2-ctl --list-devices
+
+# Test camera capture (Ctrl+C to stop)
+ffplay /dev/video0
+```
+
+Update `config/config.yaml` if your camera is not at `/dev/video0`:
+
+```yaml
+camera:
+  index: 0  # Change to 1 for /dev/video1, etc.
+```
+
+### Step 7: Test System Manually
+
+```bash
+cd backend
+python3 main.py
+```
+
+You should see:
+```
+============================================================
+Poke Bowl Inventory System
+============================================================
+Camera opened: 1280x720 @ 30fps
+Model loaded in X.XXs
+System ready!
+Web interface available at: http://0.0.0.0:8080
+============================================================
+```
+
+Open browser and navigate to `http://<jetson-ip>:8080`
+
+### Step 8: Setup Auto-Start
+
+```bash
+cd deployment
+sudo bash setup_autostart.sh
+```
+
+This will:
+1. Install the backend service
+2. Install the Chromium kiosk mode service
+3. Enable both to start on boot
+
+### Step 9: Reboot and Test
+
+```bash
+sudo reboot
+```
+
+After reboot, the system should automatically:
+1. Start the inventory backend
+2. Launch Chromium in fullscreen showing the web interface
+
+---
+
+## 🎛️ Configuration
+
+Edit `config/config.yaml` to customize system behavior:
+
+### Camera Settings
+
+```yaml
+camera:
+  index: 0           # V4L2 device index
+  width: 1280        # Resolution width
+  height: 720        # Resolution height
+  fps: 30            # Target FPS
+```
+
+### Detection Settings
+
+```yaml
+detector:
+  model_path: best.pt           # Path to YOLO model
+  conf_threshold: 0.25          # Confidence threshold
+  iou_threshold: 0.45           # NMS IoU threshold
+  imgsz: 640                    # YOLO input size
+  device: '0'                   # '0' for GPU, 'cpu' for CPU
+  half: true                    # FP16 precision (recommended)
+```
+
+### Inventory Smoothing
+
+```yaml
+inventory:
+  smoothing_window: 10          # Frames to average
+  smoothing_method: median      # median, mean, or mode
+```
+
+### Web Server
+
+```yaml
+server:
+  host: '0.0.0.0'              # Listen on all interfaces
+  port: 8080                   # HTTP port
+```
+
+---
+
+## 🔧 System Management
+
+### Service Commands
+
+```bash
+# Start the system
+sudo systemctl start pokebowl-inventory
+
+# Stop the system
+sudo systemctl stop pokebowl-inventory
+
+# Restart the system
+sudo systemctl restart pokebowl-inventory
+
+# Check status
+sudo systemctl status pokebowl-inventory
+
+# View live logs
+sudo journalctl -u pokebowl-inventory -f
+
+# Disable auto-start
+sudo systemctl disable pokebowl-inventory
+
+# Enable auto-start
+sudo systemctl enable pokebowl-inventory
+```
+
+### Kiosk Mode Commands
+
+```bash
+# Start browser kiosk
+sudo systemctl start chromium-kiosk
+
+# Stop browser kiosk
+sudo systemctl stop chromium-kiosk
+
+# Check kiosk status
+sudo systemctl status chromium-kiosk
+```
+
+### Manual Testing (Without Service)
+
+```bash
+cd ~/Poke-Bowl---updated-January/backend
+python3 main.py
+```
+
+Press `Ctrl+C` to stop.
+
+---
+
+## 📊 Monitoring and Debugging
+
+### View Logs
+
+```bash
+# System logs
+sudo journalctl -u pokebowl-inventory -f
+
+# Application logs (if file logging enabled)
+tail -f /tmp/pokebowl_inventory.log
+```
+
+### Check System Resources
+
+```bash
+# GPU usage
+tegrastats
+
+# CPU/Memory
+htop
+
+# Camera status
+v4l2-ctl --list-devices
+v4l2-ctl -d /dev/video0 --all
+```
+
+### Performance Metrics
+
+Access the web interface at `http://<jetson-ip>:8080` to see:
+- Live FPS
+- Inference time
+- Frame count
+- Active connections
+
+Or use the API:
+
+```bash
+# Health check
+curl http://localhost:8080/health
+
+# Statistics
+curl http://localhost:8080/api/stats
+```
+
+---
+
+## 🐛 Troubleshooting
+
+### Camera Not Detected
+
+```bash
+# Check if camera is recognized
+lsusb
+
+# Check video devices
+ls -l /dev/video*
+
+# Test camera
+v4l2-ctl --list-formats-ext -d /dev/video0
+```
+
+**Solution**: Update `config/config.yaml` with the correct camera index.
+
+### CUDA Out of Memory
+
+**Symptoms**: Model fails to load or inference crashes
+
+**Solutions**:
+1. Enable half precision in `config.yaml`:
+   ```yaml
+   detector:
+     half: true
+   ```
+
+2. Reduce input size:
+   ```yaml
+   detector:
+     imgsz: 416  # or 320
+   ```
+
+3. Close other applications using GPU
+
+### Low FPS / High Latency
+
+**Solutions**:
+1. Lower camera resolution:
+   ```yaml
+   camera:
+     width: 640
+     height: 480
+   ```
+
+2. Reduce streaming FPS:
+   ```yaml
+   stream:
+     target_fps: 15
+   ```
+
+3. Lower YOLO input size:
+   ```yaml
+   detector:
+     imgsz: 416
+   ```
+
+### Service Won't Start
+
+```bash
+# Check service status
+sudo systemctl status pokebowl-inventory
+
+# View error logs
+sudo journalctl -u pokebowl-inventory -n 50
+
+# Check permissions
+ls -la ~/Poke-Bowl---updated-January/backend/main.py
+
+# Make sure it's executable
+chmod +x ~/Poke-Bowl---updated-January/backend/main.py
+```
+
+### Web Interface Not Loading
+
+1. Check if service is running:
+   ```bash
+   sudo systemctl status pokebowl-inventory
+   ```
+
+2. Test direct connection:
+   ```bash
+   curl http://localhost:8080
+   ```
+
+3. Check firewall:
+   ```bash
+   sudo ufw status
+   sudo ufw allow 8080
+   ```
+
+4. Verify network access:
+   ```bash
+   ifconfig  # Note the IP address
+   # Access from another device: http://<jetson-ip>:8080
+   ```
+
+---
+
+## 🔬 Development and Testing
+
+### Run Tests
+
+```bash
+cd backend
+
+# Test camera
+python3 -c "from camera import USBCamera; cam = USBCamera(); cam.open(); print(cam.get_info())"
+
+# Test detector
+python3 -c "from detector import YOLODetector; det = YOLODetector('../best.pt'); det.load(); print(det.get_info())"
+```
+
+### Development Mode
+
+For development with auto-reload, modify `backend/main.py` or run directly:
+
+```bash
+cd backend
+python3 main.py
+```
+
+Edit code and restart manually.
+
+---
+
+## 📦 Model Training
+
+The system uses a pre-trained YOLO model (`best.pt`) for detecting 40 product classes.
+
+### Classes Detected
+
+See `dataset/pokebowl_dataset/data.yaml` for the full list of 40 classes including:
+- Beverages (Coke, Sprite, Perrier, etc.)
+- Fruits (Mango, Cantaloupe, Strawberry, etc.)
+- Specialty items (Philadelphia rolls, etc.)
+
+### Retraining
+
+To retrain the model with new data:
+
+1. Add images and labels to `dataset/pokebowl_dataset/`
+2. Update `data.yaml` with class names
+3. Train using Ultralytics:
+
+```bash
+from ultralytics import YOLO
+
+model = YOLO('yolo11n.pt')  # or yolov8n.pt
+results = model.train(
+    data='dataset/pokebowl_dataset/data.yaml',
+    epochs=100,
+    imgsz=640,
+    device=0
+)
+```
+
+4. Replace `best.pt` with the new trained model
+
+---
+
+## 🔒 Security Considerations
+
+### Production Deployment
+
+1. **Change default port**: Edit `config/config.yaml`
+2. **Restrict access**: Set `host: '127.0.0.1'` for localhost only
+3. **Add authentication**: Implement in `backend/server.py` (not included)
+4. **Use HTTPS**: Add reverse proxy (nginx/caddy) with SSL
+5. **Firewall rules**:
+   ```bash
+   sudo ufw enable
+   sudo ufw allow 22     # SSH
+   sudo ufw allow 8080   # Web interface
+   ```
+
+---
+
+## 📈 Performance Optimization
+
+### Jetson Power Mode
+
+Set maximum performance:
+
+```bash
+# Check current mode
+sudo nvpmodel -q
+
+# Set to maximum performance (mode 0)
+sudo nvpmodel -m 0
+
+# Set fan to maximum
+sudo jetson_clocks
+```
+
+### GPU Memory Management
+
+Monitor GPU memory:
+
+```bash
+tegrastats
+```
+
+If running low on memory:
+1. Enable FP16 precision (`half: true`)
+2. Reduce batch size (currently 1 for real-time)
+3. Lower input resolution
+
+---
+
+## 📝 License
+
+[Specify your license here]
+
+---
+
+## 🤝 Contributing
+
+[Add contribution guidelines if applicable]
+
+---
+
+## 📧 Support
+
+For issues, questions, or feature requests:
+- Check the troubleshooting section above
+- Review logs: `sudo journalctl -u pokebowl-inventory -f`
+- [Add contact/support information]
+
+---
+
+## 🙏 Acknowledgments
+
+- **Ultralytics YOLO**: https://github.com/ultralytics/ultralytics
+- **NVIDIA Jetson**: https://developer.nvidia.com/embedded/jetson
+- Built for restaurant inventory management
+
+---
+
+## 📅 Changelog
+
+### Version 1.0.0 (January 2026)
+- Initial production release
+- YOLO-based detection with 40 product classes
+- Real-time WebSocket streaming
+- Temporal smoothing for inventory stability
+- Auto-start systemd service
+- Chromium kiosk mode integration
+
+---
+
+**System Status**: ✅ Production Ready
+
+**Last Updated**: January 2026
 

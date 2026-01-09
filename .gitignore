@@ -4,26 +4,34 @@ __pycache__/
 *$py.class
 *.so
 .Python
-env/
-venv/
-ENV/
-*.egg-info/
-dist/
 build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+venv/
+env/
+ENV/
 
-# Database
-*.db
-*.db-journal
-*.sqlite
-*.sqlite3
+# PyTorch
+*.pth
+*.onnx
 
 # Logs
 *.log
-*.log.*
-
-# Environment variables
-.env
-.env.local
+logs/
+/tmp/
 
 # IDE
 .vscode/
@@ -31,41 +39,31 @@ build/
 *.swp
 *.swo
 *~
-
-# OS
 .DS_Store
-Thumbs.db
-desktop.ini
 
-# Project specific
-inventory.db
-inventory_events.log
-report_generator.log
-report_cron.log
-low_inventory_snapshot.jpg
-inventory_report_*.csv
+# Model files (keep best.pt, ignore others)
+runs/
+weights/
+!best.pt
 
-# Temporary files
+# System
+.cache/
+*.bak
 *.tmp
-*.temp
 
-# Large model files (already in repo, keep for now)
-# best.pt
+# Environment
+.env
+.env.local
 
-# Milad's progress folder (appears to be unrelated boot files)
-Milad's progress/
+# Jupyter
+.ipynb_checkpoints/
 
-# Zip files (very large)
-*.zip
-project-2-at-2025-09-11-20-06-14f25e97.zip
-YOLOv8 OBB/
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
 
-# Image training data (too large for GitHub - can upload separately or use Git LFS)
-Images/
-
-# Old project folder (can be added selectively if needed)
-project-2-at-2025-09-11-20-06-14f25e97/images/
-project-2-at-2025-09-11-20-06-14f25e97/labels/
-project-2-at-2025-09-11-20-06-14f25e97/pokebowl_dataset/
-project-2-at-2025-09-11-20-06-14f25e97/pokebowl_dataset.zip
+# Deployment
+*.pid
+*.sock
 
